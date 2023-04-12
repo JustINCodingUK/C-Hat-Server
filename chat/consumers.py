@@ -3,6 +3,8 @@ from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from chat.models import ChatUser
 from django.core.mail import send_mail
+from eventbus_intializer import bus
+from .event import ChatEvent
 import json
 
 class ChatServiceConsumer(AsyncJsonWebsocketConsumer):
@@ -11,6 +13,8 @@ class ChatServiceConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         await self.accept()
+        bus.fire_event(ChatEvent.ON_USER_CONNECT)
+        
         
     async def receive(self, text_data):
         print(text_data)
@@ -18,6 +22,7 @@ class ChatServiceConsumer(AsyncJsonWebsocketConsumer):
             await self.authorise(text_data)
         else:
             try:
+                bus.fire_event(ChatEvent.ON_MESSAGE_RECEIVED)
                 json_data = json.loads(text_data)
                 await self.channel_layer.group_send(
                    json_data["rcid"],
@@ -33,6 +38,7 @@ class ChatServiceConsumer(AsyncJsonWebsocketConsumer):
                 print(e)
             
     async def disconnect(self, code):
+        bus.fire_event(ChatEvent.ON_USER_DISCONNECT)
         print(code)
 
 
@@ -57,6 +63,7 @@ class ChatServiceConsumer(AsyncJsonWebsocketConsumer):
                     "client_id": str(await self.get_user_id(json_data["mail_id"])),
                     "username": str(await self.get_username(json_data["mail_id"]))
                 })
+                bus.fire_event(ChatEvent.ON_USER_LOGIN)
             else:
                 await self.send_json({
                     "event": "auth",
@@ -101,6 +108,7 @@ class RegisterUserConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         await self.accept()
+        bus.fire_event(ChatEvent.ON_CLIENT_CONNECT)
     
     async def receive(self, text_data):
         json_data = json.loads(text_data)
@@ -150,6 +158,7 @@ class RegisterUserConsumer(AsyncJsonWebsocketConsumer):
                     "event": "confirmation",
                     "status": "done"
                 })
+                bus.fire_event(ChatEvent.ON_USER_REGISTER)
 
             else:
                 await self.send_json({
